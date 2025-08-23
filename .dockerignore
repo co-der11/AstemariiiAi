@@ -1,0 +1,12 @@
+node_modules
+npm-debug.log
+logs
+*.log
+.env
+.git
+.gitignore
+README.md
+BOT_SETUP_GUIDE.md
+PROJECT_STRUCTURE.md
+test-features.js
+setup.js
