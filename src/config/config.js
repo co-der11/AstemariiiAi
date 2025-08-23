@@ -1,5 +1,11 @@
 require('dotenv').config();
 
+// Add debug logging for channel configuration
+console.log('🔍 Environment Variables Debug:');
+console.log('TELEGRAM_CHANNEL_ID:', process.env.TELEGRAM_CHANNEL_ID ? 'Set' : 'Missing');
+console.log('TELEGRAM_CHANNEL_ID value:', process.env.TELEGRAM_CHANNEL_ID);
+console.log('TELEGRAM_BOT_TOKEN:', process.env.TELEGRAM_BOT_TOKEN ? 'Set' : 'Missing');
+
 const config = {
   telegram: {
     token: process.env.TELEGRAM_BOT_TOKEN,

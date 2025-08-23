@@ -307,6 +307,16 @@ const handleApproval = async (ctx) => {
           });
           return ctx.answerCbQuery('❌ Channel not configured. Contact administrator.');
         }
+        
+        // Add debug logging to show which channel is being used
+        logger.info('Posting question to channel', {
+          userId: ctx.from.id,
+          questionId,
+          channelId: config.telegram.channelId,
+          channelIdType: typeof config.telegram.channelId,
+          channelIdLength: config.telegram.channelId ? config.telegram.channelId.toString().length : 0
+        });
+        
         let channelMessage;
         const questionText = `<b>❓ Question from Student</b>\n\n` +
           `${question.content}\n\n` +

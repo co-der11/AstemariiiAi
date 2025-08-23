@@ -29,15 +29,63 @@ bot.use(session()); // Add this line after bot initialization
 const checkChannelSubscription = require('./middlewares/channelSubscription').default;
 bot.use(checkChannelSubscription);
 
-// Connect to MongoDB
-mongoose.connect(config.mongodb.uri, config.mongodb.options)
-.then(() => {
-  logger.info('Connected to MongoDB');
-})
-.catch((error) => {
-  logger.error('MongoDB connection error:', error);
-  process.exit(1);
-});
+// Connect to MongoDB with improved error handling and retry logic
+let mongoRetryCount = 0;
+const maxRetries = 3;
+
+const connectToMongoDB = async () => {
+  try {
+    logger.info(`Attempting to connect to MongoDB (attempt ${mongoRetryCount + 1}/${maxRetries})...`);
+    
+    await mongoose.connect(config.mongodb.uri, {
+      ...config.mongodb.options,
+      serverSelectionTimeoutMS: 30000,
+      socketTimeoutMS: 60000,
+      connectTimeoutMS: 30000,
+      heartbeatFrequencyMS: 10000,
+      retryWrites: true,
+      family: 4,
+      maxPoolSize: 10,
+      minPoolSize: 1
+    });
+    
+    logger.info('✅ Successfully connected to MongoDB');
+    mongoRetryCount = 0; // Reset retry count on success
+    
+    // Set up connection event listeners
+    mongoose.connection.on('error', (error) => {
+      logger.error('MongoDB connection error:', error);
+    });
+    
+    mongoose.connection.on('disconnected', () => {
+      logger.warn('MongoDB disconnected');
+    });
+    
+    mongoose.connection.on('reconnected', () => {
+      logger.info('MongoDB reconnected');
+    });
+    
+  } catch (error) {
+    mongoRetryCount++;
+    logger.error(`MongoDB connection attempt ${mongoRetryCount} failed:`, error);
+    
+    if (mongoRetryCount < maxRetries) {
+      logger.info(`Retrying in 5 seconds... (${mongoRetryCount}/${maxRetries})`);
+      setTimeout(connectToMongoDB, 5000);
+    } else {
+      logger.error('Max MongoDB connection retries reached. Exiting...');
+      logger.error('Please check:');
+      logger.error('1. Your internet connection');
+      logger.error('2. MongoDB Atlas IP whitelist includes your current IP');
+      logger.error('3. MongoDB credentials are correct');
+      logger.error('4. MongoDB Atlas cluster is running');
+      process.exit(1);
+    }
+  }
+};
+
+// Initialize MongoDB connection
+connectToMongoDB();
 
 // Setup handlers
 logger.info('Setting up bot handlers...');
@@ -54,13 +102,14 @@ bot.command('help', async (ctx) => {
   try {
     const isAdmin = ctx.from?.id?.toString() === '5752137292';
     const adminLines = isAdmin
-      ? '/admin - Admin panel (admin only)\n/checkadmin - Check your admin status\n/setupadmin - Create first admin (initial setup)\n'
+      ? '/admin - Admin panel (admin only)\n/checkadmin - Check your admin status\n/setupadmin - Create first admin (initial setup)\n/debug - Debug configuration (admin only)\n'
       : '';
     await ctx.reply(
       '❓ <b>Help Menu</b>\n\n' +
       '📋 <b>Available Commands:</b>\n' +
       '/start - Start the bot\n' +
       '/ask - Ask questions to the community\n' +
+      '/testconfig - Test bot configuration\n' +
       adminLines +
       '/help - Show this help menu\n\n' +
       '❓ <b>Ask Questions:</b>\n' +
@@ -263,7 +312,7 @@ bot.action('help_menu', async (ctx) => {
   try {
     const isAdmin = ctx.from?.id?.toString() === '5752137292';
     const adminLines = isAdmin
-      ? '/admin - Admin panel (admin only)\n/checkadmin - Check your admin status\n/setupadmin - Create first admin (initial setup)\n'
+      ? '/admin - Admin panel (admin only)\n/checkadmin - Check your admin status\n/setupadmin - Create first admin (initial setup)\n/debug - Debug configuration (admin only)\n'
       : '';
     await ctx.editMessageText(
       '❓ <b>Help Menu</b>\n\n' +

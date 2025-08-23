@@ -7,21 +7,62 @@ const PORT = process.env.PORT || 3000;
 // Health check endpoint for Render
 app.get('/health', async (req, res) => {
   try {
-    // Check MongoDB connection
-    const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+    // Check MongoDB connection with detailed status
+    const dbState = mongoose.connection.readyState;
+    let dbStatus, dbDetails;
+    
+    switch(dbState) {
+      case 0: // disconnected
+        dbStatus = 'disconnected';
+        dbDetails = 'MongoDB is not connected';
+        break;
+      case 1: // connected
+        dbStatus = 'connected';
+        dbDetails = 'MongoDB is connected and ready';
+        break;
+      case 2: // connecting
+        dbStatus = 'connecting';
+        dbDetails = 'MongoDB is attempting to connect';
+        break;
+      case 3: // disconnecting
+        dbStatus = 'disconnecting';
+        dbDetails = 'MongoDB is disconnecting';
+        break;
+      default:
+        dbStatus = 'unknown';
+        dbDetails = 'MongoDB connection state is unknown';
+    }
     
     res.json({
-      status: 'healthy',
+      status: dbState === 1 ? 'healthy' : 'unhealthy',
       timestamp: new Date().toISOString(),
-      database: dbStatus,
+      database: {
+        status: dbStatus,
+        details: dbDetails,
+        state: dbState,
+        host: mongoose.connection.host || 'unknown',
+        port: mongoose.connection.port || 'unknown',
+        name: mongoose.connection.name || 'unknown'
+      },
       uptime: process.uptime(),
-      memory: process.memoryUsage()
+      memory: process.memoryUsage(),
+      environment: {
+        node_version: process.version,
+        platform: process.platform,
+        arch: process.arch
+      }
     });
   } catch (error) {
     res.status(500).json({
       status: 'unhealthy',
       error: error.message,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      troubleshooting: {
+        mongodb_ip_whitelist: 'Check if your current IP is whitelisted in MongoDB Atlas',
+        mongodb_credentials: 'Verify your MongoDB username and password',
+        network_connectivity: 'Ensure your server can reach MongoDB Atlas servers',
+        mongodb_cluster: 'Verify your MongoDB Atlas cluster is running'
+      }
     });
   }
 });

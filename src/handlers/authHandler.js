@@ -12,6 +12,21 @@ const setupAuthHandler = (bot) => {
   bot.command('start', async (ctx) => {
     try {
       const telegramId = ctx.from.id.toString();
+      
+      // Validate channel configuration first
+      if (!config.telegram.channelLink) {
+        logger.error('Channel link not configured in start command', {
+          userId: telegramId,
+          channelLink: config.telegram.channelLink
+        });
+        await ctx.reply(
+          '❌ <b>Bot Configuration Error</b>\n\n' +
+          'The bot is not properly configured. Please contact an administrator.',
+          { parse_mode: 'HTML' }
+        );
+        return;
+      }
+      
       // Capture deep-link payload like: /start answer_<id>
       const rawText = ctx.message?.text || '';
       const possiblePayload = rawText.split(' ').slice(1).join(' ').trim();
@@ -28,7 +43,22 @@ const setupAuthHandler = (bot) => {
       }
       
       // Create or update user
-      let user = await User.createOrUpdate(ctx.from);
+      let user;
+      try {
+        user = await User.createOrUpdate(ctx.from);
+        logger.info('User created/updated successfully', { userId: telegramId });
+      } catch (userError) {
+        logger.error('Error creating/updating user:', {
+          error: userError.message,
+          userId: telegramId
+        });
+        await ctx.reply(
+          '❌ <b>Error Creating User</b>\n\n' +
+          'There was an error setting up your account. Please try again or contact support.',
+          { parse_mode: 'HTML' }
+        );
+        return;
+      }
       
       // Check if user has completed onboarding
       if (user.onboardingCompleted) {
@@ -46,23 +76,138 @@ const setupAuthHandler = (bot) => {
       }
       
       // Start onboarding process
-      await ctx.reply(
-        '🎓 <b>Welcome to Student Helper Bot!</b>\n\n' +
-        'To get started, please complete these steps:\n\n' +
-        '1️⃣ Subscribe to our channel\n' +
-        '2️⃣ Share your contact information\n\n' +
-        "Let's begin with channel subscription:",
-        {
-          parse_mode: 'HTML',
-          ...Markup.inlineKeyboard([
-            [Markup.button.url('📢 Join Channel', config.telegram.channelLink)],
-            [Markup.button.callback("✅ I'm Subscribed", 'check_subscription')]
-          ])
+      try {
+        // Check if we have channel configuration
+        if (!config.telegram.channelLink) {
+          // Fallback onboarding without channel subscription
+          await ctx.reply(
+            '🎓 <b>Welcome to Student Helper Bot!</b>\n\n' +
+            '⚠️ <b>Note:</b> Channel subscription is not configured.\n\n' +
+            '📱 <b>Next Step: Share Contact</b>\n\n' +
+            'Please share your contact information to complete the setup.',
+            {
+              parse_mode: 'HTML',
+              reply_markup: Markup.inlineKeyboard([
+                [Markup.button.callback('📱 Share Contact', 'share_contact')],
+                [Markup.button.callback('❌ Cancel', 'cancel_onboarding')]
+              ])
+            }
+          );
+          
+          // Show contact keyboard
+          await ctx.reply(
+            '📱 Share your contact using the button below:',
+            {
+              parse_mode: 'HTML',
+              reply_markup: {
+                keyboard: [[{ text: '📱 Share My Contact', request_contact: true }]],
+                resize_keyboard: true,
+                one_time_keyboard: false
+              }
+            }
+          );
+          return;
         }
+        
+        await ctx.reply(
+          '🎓 <b>Welcome to Student Helper Bot!</b>\n\n' +
+          'To get started, please complete these steps:\n\n' +
+          '1️⃣ Subscribe to our channel\n' +
+          '2️⃣ Share your contact information\n\n' +
+          "Let's begin with channel subscription:",
+          {
+            parse_mode: 'HTML',
+            reply_markup: Markup.inlineKeyboard([
+              [Markup.button.url('📢 Join Channel', config.telegram.channelLink)],
+              [Markup.button.callback("✅ I'm Subscribed", 'check_subscription')]
+            ])
+          }
+        );
+      } catch (replyError) {
+        logger.error('Error sending welcome message:', {
+          error: replyError.message,
+          userId: telegramId,
+          channelLink: config.telegram.channelLink
+        });
+        
+        // Fallback message if the main message fails
+        await ctx.reply(
+          '🎓 <b>Welcome to Student Helper Bot!</b>\n\n' +
+          'Please contact an administrator to complete your setup.',
+          { parse_mode: 'HTML' }
+        );
+      }
+    } catch (error) {
+      logger.error('Error in start command:', {
+        error: error.message,
+        stack: error.stack,
+        userId: ctx.from?.id
+      });
+      await ctx.reply('❌ An error occurred. Please try again.');
+    }
+  });
+
+  // Simple config test command (no database required)
+  bot.command('testconfig', async (ctx) => {
+    try {
+      const configStatus = {
+        botToken: config.telegram.token ? '✅ Set' : '❌ Missing',
+        channelId: config.telegram.channelId ? '✅ Set' : '❌ Missing',
+        channelLink: config.telegram.channelLink ? '✅ Set' : '❌ Missing',
+        mongoUri: config.mongodb.uri ? '✅ Set' : '❌ Missing'
+      };
+      
+      await ctx.reply(
+        '🔍 <b>Configuration Test</b>\n\n' +
+        `Bot Token: ${configStatus.botToken}\n` +
+        `Channel ID: ${configStatus.channelId}\n` +
+        `Channel Link: ${configStatus.channelLink}\n` +
+        `MongoDB URI: ${configStatus.mongoUri}\n\n` +
+        'If any show ❌ Missing, check your environment variables.',
+        { parse_mode: 'HTML' }
       );
     } catch (error) {
-      logger.error('Error in start command:', error);
-      await ctx.reply('❌ An error occurred. Please try again.');
+      logger.error('Error in testconfig command:', error);
+      await ctx.reply('❌ Error testing configuration.');
+    }
+  });
+
+  // Debug command for troubleshooting (admin only)
+  bot.command('debug', async (ctx) => {
+    try {
+      const telegramId = ctx.from.id.toString();
+      const user = await User.findOne({ telegramId });
+      
+      if (!user || !user.isAdmin) {
+        return ctx.reply('❌ This command is for administrators only.');
+      }
+      
+      const debugInfo = {
+        userId: telegramId,
+        channelId: config.telegram.channelId,
+        channelLink: config.telegram.channelLink,
+        botToken: config.telegram.token ? 'Set' : 'Missing',
+        hasChannelId: !!config.telegram.channelId,
+        hasChannelLink: !!config.telegram.channelLink,
+        envChannelId: process.env.TELEGRAM_CHANNEL_ID ? 'Set' : 'Missing',
+        envChannelLink: process.env.TELEGRAM_CHANNEL_LINK ? 'Set' : 'Missing'
+      };
+      
+      await ctx.reply(
+        '🔍 <b>Debug Information</b>\n\n' +
+        `User ID: ${debugInfo.userId}\n` +
+        `Channel ID: ${debugInfo.channelId || 'Not set'}\n` +
+        `Channel Link: ${debugInfo.channelLink || 'Not set'}\n` +
+        `Bot Token: ${debugInfo.botToken}\n` +
+        `Has Channel ID: ${debugInfo.hasChannelId}\n` +
+        `Has Channel Link: ${debugInfo.hasChannelLink}\n` +
+        `ENV Channel ID: ${debugInfo.envChannelId}\n` +
+        `ENV Channel Link: ${debugInfo.envChannelLink}`,
+        { parse_mode: 'HTML' }
+      );
+    } catch (error) {
+      logger.error('Error in debug command:', error);
+      await ctx.reply('❌ Error getting debug info.');
     }
   });
 
@@ -92,7 +237,7 @@ const setupAuthHandler = (bot) => {
         '🔗 <b>Channel:</b> ' + config.telegram.channelLink,
         {
           parse_mode: 'HTML',
-          ...Markup.inlineKeyboard([
+          reply_markup: Markup.inlineKeyboard([
             [Markup.button.url('📢 Join Channel', config.telegram.channelLink)],
             [Markup.button.callback('✅ Check Subscription', 'check_subscription')],
             [Markup.button.callback('❌ Cancel', 'cancel_onboarding')]
@@ -109,25 +254,63 @@ const setupAuthHandler = (bot) => {
   bot.action('check_subscription', async (ctx) => {
     try {
       const telegramId = ctx.from.id.toString();
+      
+      // Validate channel configuration
+      if (!config.telegram.channelLink) {
+        logger.error('Channel link not configured in subscription check', {
+          userId: telegramId
+        });
+        await ctx.answerCbQuery('❌ Channel not configured');
+        await ctx.reply(
+          '❌ <b>Configuration Error</b>\n\n' +
+          'The bot is not properly configured. Please contact an administrator.',
+          { parse_mode: 'HTML' }
+        );
+        return;
+      }
+      
       const user = await User.findOne({ telegramId });
       
       if (!user) {
+        logger.error('User not found in subscription check', { userId: telegramId });
         return ctx.reply('❌ User not found. Please try /start again.');
       }
 
       // Check if user is subscribed
-      const isSubscribed = await checkSubscription(ctx);
+      let isSubscribed = false;
+      try {
+        isSubscribed = await checkSubscription(ctx);
+        logger.info('Subscription check completed', { 
+          userId: telegramId, 
+          isSubscribed 
+        });
+      } catch (subError) {
+        logger.error('Error checking subscription:', {
+          error: subError.message,
+          userId: telegramId
+        });
+        // Default to not subscribed if check fails
+        isSubscribed = false;
+      }
       
       if (isSubscribed) {
         user.hasSubscribedToChannel = true;
-        await user.save();
+        try {
+          await user.save();
+          logger.info('User subscription status updated', { userId: telegramId });
+        } catch (saveError) {
+          logger.error('Error saving user subscription status:', {
+            error: saveError.message,
+            userId: telegramId
+          });
+        }
         
         // Move to contact sharing step
         await ctx.reply(
           '✅ <b>Subscription Verified!</b>\n\n' +
           'Great! You\'ve successfully subscribed to our channel.\n\n' +
           '📱 <b>Next Step: Share Contact</b>\n\n' +
-          'Please share your contact information to complete the setup.\n\nTap the button below to continue:',
+          'Please share your contact information to complete the setup.\nTap the button below to continue:',
           {
             parse_mode: 'HTML',
             reply_markup: Markup.inlineKeyboard([
@@ -170,7 +353,11 @@ const setupAuthHandler = (bot) => {
         );
       }
     } catch (error) {
-      logger.error('Error in check subscription action:', error);
+      logger.error('Error in check subscription action:', {
+        error: error.message,
+        stack: error.stack,
+        userId: ctx.from?.id
+      });
       await ctx.answerCbQuery('❌ An error occurred. Please try again.');
     }
   });
@@ -349,19 +536,64 @@ const checkSubscription = async (ctx) => {
           channelIdentifier = `@${username}`;
         }
       } catch (e) {
-        // ignore parsing errors; will fallback to warning below
+        logger.warn('Error parsing channel link:', {
+          error: e.message,
+          channelLink: config.telegram.channelLink
+        });
       }
     }
 
     if (!channelIdentifier) {
-      logger.warn('Channel not configured (no ID or resolvable link); skipping subscription check');
+      logger.warn('Channel not configured (no ID or resolvable link); skipping subscription check', {
+        hasChannelId: !!config.telegram.channelId,
+        hasEnvChannelId: !!process.env.TELEGRAM_CHANNEL_ID,
+        hasChannelLink: !!config.telegram.channelLink,
+        channelLink: config.telegram.channelLink
+      });
       return true;
     }
 
-    const member = await ctx.telegram.getChatMember(channelIdentifier, ctx.from.id);
-    return ['creator', 'administrator', 'member'].includes(member.status);
+    logger.info('Checking subscription for channel:', {
+      userId: ctx.from?.id,
+      channelIdentifier,
+      channelIdType: typeof channelIdentifier
+    });
+
+    try {
+      const member = await ctx.telegram.getChatMember(channelIdentifier, ctx.from.id);
+      const isSubscribed = ['creator', 'administrator', 'member'].includes(member.status);
+      
+      logger.info('Subscription check result:', {
+        userId: ctx.from?.id,
+        channelIdentifier,
+        memberStatus: member.status,
+        isSubscribed
+      });
+      
+      return isSubscribed;
+    } catch (telegramError) {
+      logger.error('Telegram API error checking subscription:', {
+        error: telegramError.message,
+        userId: ctx.from?.id,
+        channelIdentifier
+      });
+      
+      // If it's a channel not found error, log it specifically
+      if (telegramError.description && telegramError.description.includes('chat not found')) {
+        logger.error('Channel not found or bot not in channel:', {
+          channelIdentifier,
+          userId: ctx.from?.id
+        });
+      }
+      
+      return false;
+    }
   } catch (error) {
-    logger.error('Error checking channel subscription:', error);
+    logger.error('Unexpected error in checkSubscription:', {
+      error: error.message,
+      stack: error.stack,
+      userId: ctx.from?.id
+    });
     return false;
   }
 };
