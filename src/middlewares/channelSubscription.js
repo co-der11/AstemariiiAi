@@ -121,7 +121,7 @@ const checkChannelSubscription = async (ctx, next) => {
       
       // Make sure channel link is available
       if (!config.telegram.channelLink) {
-        logger.error('Channel link not configured');
+        logger.warn('Channel link not configured, allowing access without subscription');
         return next(); // Allow access rather than blocking users
       }
       

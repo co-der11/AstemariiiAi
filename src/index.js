@@ -353,7 +353,33 @@ bot.catch((err, ctx) => {
 
 // Start the bot
 logger.info('Launching bot...');
-bot.launch()
+
+// Clean up any existing webhooks to prevent conflicts
+const cleanupWebhook = async () => {
+  try {
+    logger.info('🧹 Cleaning up any existing webhooks...');
+    await bot.telegram.deleteWebhook();
+    logger.info('✅ Webhook cleanup completed');
+  } catch (error) {
+    logger.info('ℹ️ No webhook to clean up or cleanup not needed');
+  }
+};
+
+// Clean up webhook first, then launch
+cleanupWebhook()
+  .then(() => {
+    // Configure bot launch options to handle conflicts
+    const launchOptions = {
+      polling: {
+        timeout: 30,
+        limit: 100,
+        retryTimeout: 5000,
+        allowedUpdates: ['message', 'callback_query', 'chat_member']
+      }
+    };
+
+    return bot.launch(launchOptions);
+  })
   .then(() => {
     logger.info('✅ Bot started successfully');
     logger.info('📋 Available commands: /start, /help, /admin, /checkadmin, /setupadmin, /makeadmin, /listadmins');
@@ -365,20 +391,73 @@ bot.launch()
     });
   })
   .catch((error) => {
-    logger.error('❌ Error starting bot:', error);
+    if (error.response && error.response.error_code === 409) {
+      logger.error('❌ Bot conflict detected. This usually means:');
+      logger.error('   1. Another instance of the bot is running');
+      logger.error('   2. The bot was not shut down properly');
+      logger.error('   3. There are conflicting webhook configurations');
+      logger.error('');
+      logger.error('🔧 Solutions:');
+      logger.error('   1. Stop any other running bot instances');
+      logger.error('   2. Wait 1-2 minutes and try again');
+      logger.error('   3. Check if the bot is running elsewhere');
+      logger.error('   4. If using webhooks, ensure only one endpoint is active');
+      logger.error('');
+      logger.error('💡 Try running: npm run stop (if available) or restart your terminal');
+    } else {
+      logger.error('❌ Error starting bot:', error);
+    }
     process.exit(1);
   });
 
 // Graceful shutdown
-process.once('SIGINT', () => {
-  bot.stop('SIGINT');
-  mongoose.connection.close();
-  logger.info('Bot stopped gracefully');
+process.once('SIGINT', async () => {
+  logger.info('🛑 Received SIGINT, shutting down gracefully...');
+  try {
+    // Clean up webhook if it exists
+    try {
+      await bot.telegram.deleteWebhook();
+      logger.info('✅ Webhook cleaned up');
+    } catch (webhookError) {
+      logger.info('ℹ️ No webhook to clean up');
+    }
+    
+    await bot.stop('SIGINT');
+    logger.info('✅ Bot stopped');
+    
+    await mongoose.connection.close();
+    logger.info('✅ MongoDB connection closed');
+    
+    logger.info('✅ Bot stopped gracefully');
+    process.exit(0);
+  } catch (error) {
+    logger.error('❌ Error during graceful shutdown:', error);
+    process.exit(1);
+  }
 });
 
-process.once('SIGTERM', () => {
-  bot.stop('SIGTERM');
-  mongoose.connection.close();
-  logger.info('Bot stopped gracefully');
+process.once('SIGTERM', async () => {
+  logger.info('🛑 Received SIGTERM, shutting down gracefully...');
+  try {
+    // Clean up webhook if it exists
+    try {
+      await bot.telegram.deleteWebhook();
+      logger.info('✅ Webhook cleaned up');
+    } catch (webhookError) {
+      logger.info('ℹ️ No webhook to clean up');
+    }
+    
+    await bot.stop('SIGTERM');
+    logger.info('✅ Bot stopped');
+    
+    await mongoose.connection.close();
+    logger.info('✅ MongoDB connection closed');
+    
+    logger.info('✅ Bot stopped gracefully');
+    process.exit(0);
+  } catch (error) {
+    logger.error('❌ Error during graceful shutdown:', error);
+    process.exit(1);
+  }
 });
 

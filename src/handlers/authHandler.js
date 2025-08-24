@@ -15,16 +15,11 @@ const setupAuthHandler = (bot) => {
       
       // Validate channel configuration first
       if (!config.telegram.channelLink) {
-        logger.error('Channel link not configured in start command', {
+        logger.warn('Channel link not configured in start command, proceeding without channel subscription', {
           userId: telegramId,
           channelLink: config.telegram.channelLink
         });
-        await ctx.reply(
-          '❌ <b>Bot Configuration Error</b>\n\n' +
-          'The bot is not properly configured. Please contact an administrator.',
-          { parse_mode: 'HTML' }
-        );
-        return;
+        // Don't block the user, just log a warning
       }
       
       // Capture deep-link payload like: /start answer_<id>
@@ -109,20 +104,28 @@ const setupAuthHandler = (bot) => {
           return;
         }
         
-        await ctx.reply(
-          '🎓 <b>Welcome to Student Helper Bot!</b>\n\n' +
+        // Normal onboarding with channel subscription
+        const welcomeMessage = '🎓 <b>Welcome to Student Helper Bot!</b>\n\n' +
           'To get started, please complete these steps:\n\n' +
           '1️⃣ Subscribe to our channel\n' +
           '2️⃣ Share your contact information\n\n' +
-          "Let's begin with channel subscription:",
-          {
-            parse_mode: 'HTML',
-            reply_markup: Markup.inlineKeyboard([
-              [Markup.button.url('📢 Join Channel', config.telegram.channelLink)],
-              [Markup.button.callback("✅ I'm Subscribed", 'check_subscription')]
-            ])
-          }
-        );
+          "Let's begin with channel subscription:";
+        
+        const keyboard = Markup.inlineKeyboard([
+          [Markup.button.url('📢 Join Channel', config.telegram.channelLink)],
+          [Markup.button.callback("✅ I'm Subscribed", 'check_subscription')]
+        ]);
+        
+        logger.info('Sending welcome message with buttons', {
+          userId: telegramId,
+          channelLink: config.telegram.channelLink,
+          hasKeyboard: !!keyboard.reply_markup
+        });
+        
+        await ctx.reply(welcomeMessage, {
+          parse_mode: 'HTML',
+          reply_markup: keyboard.reply_markup
+        });
       } catch (replyError) {
         logger.error('Error sending welcome message:', {
           error: replyError.message,
@@ -144,6 +147,37 @@ const setupAuthHandler = (bot) => {
         userId: ctx.from?.id
       });
       await ctx.reply('❌ An error occurred. Please try again.');
+    }
+  });
+
+  // Test buttons command
+  bot.command('testbuttons', async (ctx) => {
+    try {
+      const channelLink = config.telegram.channelLink || 'https://t.me/temari_helper';
+      
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.url('📢 Join Channel', channelLink)],
+        [Markup.button.callback("✅ I'm Subscribed", 'check_subscription')]
+      ]);
+      
+      await ctx.reply(
+        '🧪 <b>Button Test</b>\n\n' +
+        'This is a test message to check if buttons are working.\n\n' +
+        'You should see two buttons below:',
+        {
+          parse_mode: 'HTML',
+          reply_markup: keyboard.reply_markup
+        }
+      );
+      
+      logger.info('Test buttons sent', {
+        userId: ctx.from.id,
+        channelLink: channelLink
+      });
+      
+    } catch (error) {
+      logger.error('Error in testbuttons command:', error);
+      await ctx.reply('❌ Error testing buttons.');
     }
   });
 

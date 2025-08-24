@@ -10,7 +10,7 @@ const config = {
   telegram: {
     token: process.env.TELEGRAM_BOT_TOKEN,
     channelId: process.env.TELEGRAM_CHANNEL_ID,
-    channelLink: process.env.TELEGRAM_CHANNEL_LINK,
+    channelLink: process.env.TELEGRAM_CHANNEL_LINK || process.env.TELEGRAM_ADMIN_CHANNEL_LINK,
     adminIds: (process.env.ADMIN_IDS || '5752137292').split(',').map(id => id.trim())
   },
   mongodb: {
