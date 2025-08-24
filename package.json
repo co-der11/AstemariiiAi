@@ -4,7 +4,7 @@
   "description": "A Telegram bot for student assistance",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
+    "start": "node start.js",
     "dev": "nodemon src/index.js",
     "cleanup": "node stop-bot.js",
     "force-reset": "node force-reset-bot.js",

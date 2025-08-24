@@ -4,7 +4,8 @@ services:
     env: node
     plan: free
     buildCommand: npm install
-    startCommand: npm start
+    startCommand: node start.js
+    healthCheckPath: /ping
     envVars:
       - key: NODE_ENV
         value: production
@@ -20,3 +21,4 @@ services:
         sync: false
       - key: LOG_LEVEL
         value: info
+    autoDeploy: true

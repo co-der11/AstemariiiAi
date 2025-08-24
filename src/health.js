@@ -4,6 +4,10 @@ const mongoose = require('mongoose');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Add basic middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 // Health check endpoint for Render
 app.get('/health', async (req, res) => {
   try {
@@ -72,8 +76,15 @@ app.get('/', (req, res) => {
   res.json({
     message: 'Student Helper Bot is running!',
     status: 'active',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    port: PORT,
+    environment: process.env.NODE_ENV || 'development'
   });
+});
+
+// Simple health check for Render
+app.get('/ping', (req, res) => {
+  res.status(200).send('pong');
 });
 
 module.exports = { app, PORT };

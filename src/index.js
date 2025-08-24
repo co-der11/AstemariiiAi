@@ -1,5 +1,11 @@
 require('dotenv').config();
 const { Telegraf, session } = require('telegraf'); // Correct import for session middleware
+
+// Log startup information
+console.log('🚀 Starting Student Helper Bot...');
+console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+console.log(`🔌 Port: ${process.env.PORT || 3000}`);
+console.log(`📁 Working Directory: ${process.cwd()}`);
 const mongoose = require('mongoose');
 const logger = require('./utils/logger');
 const config = require('./config/config');
@@ -385,9 +391,21 @@ cleanupWebhook()
     logger.info('📋 Available commands: /start, /help, /admin, /checkadmin, /setupadmin, /makeadmin, /listadmins');
     
     // Start health check server for Render
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, '0.0.0.0', () => {
       logger.info(`🌐 Health check server running on port ${PORT}`);
       logger.info(`🔍 Health check available at: http://localhost:${PORT}/health`);
+      logger.info(`🌍 Server bound to 0.0.0.0:${PORT} for Render deployment`);
+    });
+
+    // Handle server errors
+    server.on('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        logger.error(`❌ Port ${PORT} is already in use`);
+        process.exit(1);
+      } else {
+        logger.error('❌ Server error:', error);
+        process.exit(1);
+      }
     });
   })
   .catch((error) => {
