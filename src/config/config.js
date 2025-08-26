@@ -14,7 +14,7 @@ const config = {
     adminIds: (process.env.ADMIN_IDS || '5752137292').split(',').map(id => id.trim())
   },
   mongodb: {
-    uri: process.env.MONGODB_URI || 'mongodb+srv://amirhusengh:10203040Ye@cluster0.qjwdzxl.mongodb.net/studenthelperbot?retryWrites=true&w=majority&appName=Cluster0',
+    uri: process.env.MONGODB_URI || 'mongodb+srv://alemeeshetu3:10203040Ye@cluster0.n6vyeks.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0',
     options: {
       useNewUrlParser: true,
       useUnifiedTopology: true,
